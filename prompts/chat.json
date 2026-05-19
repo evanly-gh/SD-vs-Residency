@@ -1,0 +1,52 @@
+[
+  {
+    "id": "chat_01",
+    "source": "ShareGPT open-ended",
+    "prompt": "What are the main differences between machine learning, deep learning, and artificial intelligence? Can you give some concrete examples that illustrate when you would use each approach?"
+  },
+  {
+    "id": "chat_02",
+    "source": "ShareGPT open-ended",
+    "prompt": "Explain how the human immune system works. Cover the innate and adaptive responses, the roles of T cells and B cells, and how vaccines leverage this system."
+  },
+  {
+    "id": "chat_03",
+    "source": "ShareGPT open-ended",
+    "prompt": "What are the most important factors that determine whether a startup succeeds or fails? Draw on patterns from successful and failed companies to support your answer."
+  },
+  {
+    "id": "chat_04",
+    "source": "ShareGPT open-ended",
+    "prompt": "Compare and contrast nuclear power, solar power, and wind power as solutions to climate change. Discuss costs, reliability, land use, waste, and scalability."
+  },
+  {
+    "id": "chat_05",
+    "source": "ShareGPT open-ended",
+    "prompt": "How does the internet actually work at a technical level? Walk through what happens — from protocols to physical infrastructure — when I type a URL into my browser and press Enter."
+  },
+  {
+    "id": "chat_06",
+    "source": "ShareGPT open-ended",
+    "prompt": "What are the strongest philosophical arguments for and against the existence of free will? Which position do you find most compelling and why?"
+  },
+  {
+    "id": "chat_07",
+    "source": "ShareGPT open-ended",
+    "prompt": "Explain the causes and consequences of the 2008 financial crisis. What role did mortgage-backed securities, leverage, and regulatory failure play, and what reforms followed?"
+  },
+  {
+    "id": "chat_08",
+    "source": "ShareGPT open-ended",
+    "prompt": "What makes a piece of writing genuinely good? Discuss craft elements like clarity, voice, structure, and specificity, and illustrate with examples from literature you consider excellent."
+  },
+  {
+    "id": "chat_09",
+    "source": "ShareGPT open-ended",
+    "prompt": "How do large language models like GPT and Claude actually work? Explain the transformer architecture, attention mechanism, and training process at a level suitable for a software engineer who hasn't studied ML."
+  },
+  {
+    "id": "chat_10",
+    "source": "ShareGPT open-ended",
+    "prompt": "What are the most effective evidence-based strategies for learning a difficult technical subject from scratch? Discuss spaced repetition, interleaving, retrieval practice, and how to structure a self-study curriculum."
+  }
+]

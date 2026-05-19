@@ -1,0 +1,11 @@
+models/
+data/raw/
+data/logs/
+data/profiling/
+results/figures/
+llama.cpp/
+__pycache__/
+*.pyc
+.env
+*.log
+*.tmp

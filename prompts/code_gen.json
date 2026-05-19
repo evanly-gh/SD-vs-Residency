@@ -1,0 +1,52 @@
+[
+  {
+    "id": "code_01",
+    "source": "MT-Bench coding",
+    "prompt": "Implement a least recently used (LRU) cache in Python with O(1) get and put operations. Include a complete implementation with a test demonstrating it works correctly."
+  },
+  {
+    "id": "code_02",
+    "source": "MT-Bench coding",
+    "prompt": "Write a Python function that finds the longest increasing subsequence of a list of integers. Return both the length and the subsequence itself. Analyze the time complexity."
+  },
+  {
+    "id": "code_03",
+    "source": "MT-Bench coding",
+    "prompt": "Implement a binary search tree class in Python supporting insert, delete, search, and in-order traversal. Handle edge cases like deleting a node with two children."
+  },
+  {
+    "id": "code_04",
+    "source": "MT-Bench coding",
+    "prompt": "Write a function to detect a cycle in a linked list using Floyd's cycle detection algorithm. Return the node where the cycle begins, or None if there is no cycle."
+  },
+  {
+    "id": "code_05",
+    "source": "MT-Bench coding",
+    "prompt": "Implement a thread-safe bounded queue in Python using threading primitives. The queue should block producers when full and consumers when empty. Include a producer-consumer example."
+  },
+  {
+    "id": "code_06",
+    "source": "MT-Bench coding",
+    "prompt": "Write a Python decorator that retries a function up to N times with exponential backoff, catching specified exception types. Include type hints and a usage example."
+  },
+  {
+    "id": "code_07",
+    "source": "MT-Bench coding",
+    "prompt": "Implement Dijkstra's shortest path algorithm in Python using a priority queue. The graph should be represented as an adjacency list. Return the shortest distances from the source to all vertices."
+  },
+  {
+    "id": "code_08",
+    "source": "MT-Bench coding",
+    "prompt": "Write a function to serialize and deserialize a binary tree to and from a string. The serialized format should be human-readable and your solution should handle null nodes correctly."
+  },
+  {
+    "id": "code_09",
+    "source": "MT-Bench coding",
+    "prompt": "Implement a rate limiter in Python using the token bucket algorithm. It should support configuring the rate (tokens per second) and burst size, and expose a method that returns True if a request is allowed."
+  },
+  {
+    "id": "code_10",
+    "source": "MT-Bench coding",
+    "prompt": "Write a Python context manager that profiles the memory usage of a code block, reporting peak RSS memory in megabytes before and after execution. Use only the standard library."
+  }
+]
