@@ -36,23 +36,19 @@ echo "── llama.cpp binaries ────────────────
 
 # ── GPU ─────────────────────────────────────────────────────────────────────
 echo ""
-echo "── GPU / ROCm ──────────────────────────────────────────────────────────"
-if command -v rocm-smi &>/dev/null; then
-    check "rocm-smi" "ok"
-    echo "    $(rocm-smi --showproductname 2>/dev/null | grep -i 'card\|rx\|radeon' | head -1 || echo '(product name unavailable)')"
+echo "── GPU / CUDA ──────────────────────────────────────────────────────────"
+if command -v nvidia-smi &>/dev/null; then
+    check "nvidia-smi" "ok"
+    echo "    $(nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader | head -1)"
 else
-    check "rocm-smi" "not found — is ROCm in PATH?"
+    check "nvidia-smi" "not found — is the NVIDIA driver installed?"
 fi
 
-if command -v rocminfo &>/dev/null; then
-    GFX=$(rocminfo 2>/dev/null | grep -oP 'gfx\d+' | head -1 || echo "unknown")
-    check "rocminfo GPU arch" "ok"
-    echo "    Detected arch: ${GFX} (expected gfx1031 for Navi 22)"
-    if [[ "${GFX}" != "gfx1031" ]]; then
-        echo "    WARNING: arch mismatch — update AMDGPU_TARGET in build_llamacpp.sh"
-    fi
+if command -v nvcc &>/dev/null; then
+    check "nvcc" "ok"
+    echo "    CUDA: $(nvcc --version | grep -i release | head -1 || echo '(version unavailable)')"
 else
-    check "rocminfo" "not found"
+    check "nvcc" "not found — load a CUDA module or install CUDA toolkit"
 fi
 
 # ── Models ──────────────────────────────────────────────────────────────────
@@ -105,19 +101,18 @@ fi
 
 # ── VRAM headroom estimate ────────────────────────────────────────────────────
 echo ""
-echo "── VRAM headroom estimate (Navi 22, 12 GB) ─────────────────────────────"
-echo "    Qwen3-14B Q4_K_M  : ~8.5 GB"
-echo "    Qwen3-0.6B Q4_K_M : ~0.4 GB"
-echo "    KV cache @ 8192ctx : ~1.3 GB"
+echo "── VRAM headroom estimate (check against your RTX 6000) ─────────────────"
+echo "    Qwen3-14B Q4_K_M   : ~8.5 GB"
+echo "    Qwen3-0.6B Q4_K_M  : ~0.4 GB"
+echo "    KV cache @ 8192ctx: ~1.3 GB"
 echo "    ─────────────────────────────"
-echo "    Estimated total    : ~10.2 GB  (1.8 GB headroom)"
-echo "    Status: Should fit. Watch for OOM during actual runs."
+echo "    Estimated total     : ~10.2 GB"
+echo "    GPU total VRAM      : $(nvidia-smi --query-gpu=memory.total --format=csv,noheader 2>/dev/null | head -1 || echo 'unknown')"
 
 # ── Profiling tools ──────────────────────────────────────────────────────────
 echo ""
 echo "── Profiling tools ─────────────────────────────────────────────────────"
-command -v rocm-smi   &>/dev/null && check "rocm-smi"   "ok" || check "rocm-smi"   "missing"
-command -v radeontop  &>/dev/null && check "radeontop"  "ok" || echo "  - radeontop: not installed (optional; install with: sudo apt install radeontop)"
+command -v nvidia-smi &>/dev/null && check "nvidia-smi" "ok" || check "nvidia-smi" "missing"
 command -v perf       &>/dev/null && check "perf stat"  "ok" || echo "  - perf: not installed (optional; for PCIe bandwidth monitoring)"
 
 # ── Python analysis stack ─────────────────────────────────────────────────────

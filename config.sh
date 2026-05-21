@@ -19,7 +19,8 @@ MODEL_14B="${MODELS_DIR}/Qwen_Qwen3-14B-Q4_K_M.gguf"
 MODEL_32B="${MODELS_DIR}/Qwen_Qwen3-32B-Q4_K_M.gguf"
 
 # ── Hardware ──────────────────────────────────────────────────────────────────
-# Navi 22 (RX 6700/6700 XT), 12 GB VRAM, gfx1031
+# NVIDIA RTX 6000 (cluster partition: gpu-rtx6k). Use CUDA_VISIBLE_DEVICES to
+# select the GPU in your job; inside the job, GPU_ID=0 targets the visible GPU.
 GPU_ID=0
 
 # 14B fully resident: 8.5 GB model + ~0.4 GB draft + ~1.3 GB KV cache ≈ 10.2 GB
@@ -55,7 +56,7 @@ FIGURES_DIR="${RESULTS_DIR}/figures"
 # ── Profiling ─────────────────────────────────────────────────────────────────
 THERMAL_DISCARD_SECS=120   # Discard first 2 min of profiling session
 PROFILING_SECS=480         # Collect for 8 min steady-state
-ROCM_SMI_INTERVAL_MS=500   # rocm-smi polling interval
+GPU_SMI_INTERVAL_MS=500    # nvidia-smi polling interval
 
 # ── Derived ───────────────────────────────────────────────────────────────────
 mkdir -p "${RAW_DIR}" "${LOGS_DIR}" "${PROFILING_DIR}" "${FIGURES_DIR}"

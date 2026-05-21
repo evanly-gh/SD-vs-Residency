@@ -19,23 +19,30 @@ The technique works by running a small "draft" model to speculatively generate s
 
 ---
 
-## Hardware Context: Your 12 GB AMD GPU (Navi 22)
+## Hardware Context: NVIDIA RTX 6000 (cluster gpu-rtx6k)
 
-Your GPU is an **AMD Radeon RX 6700 / 6700 XT** (Navi 22, `gfx1031`), with **12 GB GDDR6 VRAM**. This is a tier not studied in the existing literature, which has only examined:
+Your target GPU is an **NVIDIA RTX 6000** (cluster partition `gpu-rtx6k`). This tier sits between consumer gaming cards and A100-class enterprise GPUs, which makes it a good research compromise: high VRAM and strong bandwidth, but still closer to practical research environments than H100/A100.
+
+Check the exact VRAM on the node:
+```bash
+nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
+```
+
+This project focuses on where speculative decoding helps vs. hurts depending on VRAM residency and offload behavior.
 
 - Enterprise: A100, H100 (80 GB HBM)
 - Community benchmarks: RTX 3090 / 4090 (24 GB GDDR6X)
 
-You sit below the commonly assumed 16 GB floor for consumer LLM work. Here is what that means for this study:
+Here is the rough VRAM footprint for the 14B condition:
 
 | Component | Size | Notes |
 |---|---|---|
 | Qwen3-14B Q4_K_M | ~8.5 GB | Target model — fits with headroom |
 | Qwen3-0.6B Q4_K_M | ~0.4 GB | Draft model — tiny |
 | KV cache @ 8192 ctx | ~1.3 GB | Estimated; Qwen3-14B has 8 KV heads |
-| **Total estimated** | **~10.2 GB** | **~1.8 GB headroom in 12 GB** |
+| **Total estimated** | **~10.2 GB** | **Compare to your GPU total** |
 
-The 14B model **should fit** fully resident. This is tighter than the 16 GB case in the proposal, which makes your hardware an especially interesting data point — KV cache pressure may force additional layer spilling that wouldn't occur on 16 GB hardware.
+The 14B model **should fit** fully resident on RTX 6000-class VRAM. The 32B model will still be useful for CPU-offload sweeps, depending on your exact VRAM size.
 
 The 32B model (~19 GB) **will not fit** — it will be used for the CPU-offload sweep with the `-ngl` flag controlling how many layers stay in VRAM.
 
@@ -52,9 +59,9 @@ This installs pandas, scipy, matplotlib, seaborn, pingouin (for ANOVA), and hugg
 
 ---
 
-## Step 1: Build llama.cpp with ROCm/HIP
+## Step 1: Build llama.cpp with CUDA
 
-You have ROCm installed but llama.cpp not yet built. Run:
+On the cluster, use CUDA and build llama.cpp with the CUDA backend. Run:
 
 ```bash
 bash setup/build_llamacpp.sh
@@ -62,11 +69,11 @@ bash setup/build_llamacpp.sh
 
 **What it does:**
 1. Clones the latest llama.cpp into `~/llama.cpp`
-2. Configures CMake with `-DGGML_HIPBLAS=ON -DAMDGPU_TARGETS=gfx1031`
+2. Configures CMake with `-DGGML_CUDA=ON`
 3. Builds with all CPU cores
 4. Verifies that `llama-bench` and `llama-cli` binaries exist
 
-**Prerequisites:** `cmake`, `git`, `g++`, and ROCm in your PATH. If `hipcc` isn't found, check that `/opt/rocm/bin` is in your `$PATH`.
+**Prerequisites:** `cmake`, `git`, `g++`, NVIDIA driver, and CUDA toolkit (`nvcc` in PATH). On clusters, load a CUDA module if needed.
 
 **Expected build time:** 5–15 minutes depending on your CPU.
 
@@ -180,7 +187,7 @@ bash scripts/run_profiling.sh 32b 32 4 spec
 bash scripts/run_profiling.sh 32b 32 4 base
 ```
 
-The script discards the first 2 minutes (thermal stabilization) and collects 8 minutes of steady-state data. rocm-smi monitors GPU utilization and VRAM usage at 500 ms intervals. Data lands in `data/profiling/profile_*.csv`.
+The script discards the first 2 minutes (thermal stabilization) and collects 8 minutes of steady-state data. nvidia-smi monitors GPU utilization and VRAM usage at 500 ms intervals. Data lands in `data/profiling/profile_*.csv`.
 
 **What we're looking for:** The resource that hits saturation first in net-negative conditions. Candidates:
 - PCIe bandwidth saturation (most likely cause in the CPU-offload regime)
@@ -236,7 +243,7 @@ python analysis/plot_profiling.py
 ├── environment.yml             # Conda environment
 │
 ├── setup/
-│   ├── build_llamacpp.sh       # Build llama.cpp with ROCm/HIP for gfx1031
+│   ├── build_llamacpp.sh       # Build llama.cpp with CUDA for NVIDIA GPUs
 │   ├── download_models.sh      # Download Qwen3 GGUFs via huggingface-cli
 │   └── verify_setup.sh         # Smoke test before benchmarking
 │
@@ -244,7 +251,7 @@ python analysis/plot_profiling.py
 │   ├── run_baseline.sh         # Phase 1: non-speculative throughput
 │   ├── run_spec_sweep.sh       # Phase 2: speculative decoding sweep
 │   ├── run_acceptance.sh       # Phase 2b: acceptance rates by task/thinking mode
-│   └── run_profiling.sh        # Phase 3: rocm-smi hardware profiling
+│   └── run_profiling.sh        # Phase 3: nvidia-smi hardware profiling
 │
 ├── prompts/
 │   ├── code_gen.json           # 10 MT-Bench coding prompts
@@ -261,7 +268,7 @@ python analysis/plot_profiling.py
 ├── data/                       # gitignored — generated data
 │   ├── raw/                    # llama-bench JSON output
 │   ├── logs/                   # llama-cli acceptance rate logs
-│   └── profiling/              # rocm-smi CSV profiling sessions
+│   └── profiling/              # nvidia-smi CSV profiling sessions
 │
 ├── models/                     # gitignored — GGUF model files
 └── results/
@@ -336,15 +343,19 @@ The proposal explicitly excludes `llama-server` as the primary benchmarking tool
 
 ## Troubleshooting
 
-### `hipcc not found` during build
-ROCm is installed but not in PATH. Add to your shell config:
+### `nvcc not found` during build
+CUDA toolkit is not in PATH. Load a CUDA module or add CUDA to your PATH:
 ```bash
-export PATH="/opt/rocm/bin:$PATH"
-export LD_LIBRARY_PATH="/opt/rocm/lib:$LD_LIBRARY_PATH"
+export PATH="/usr/local/cuda/bin:$PATH"
+export LD_LIBRARY_PATH="/usr/local/cuda/lib64:$LD_LIBRARY_PATH"
 ```
 
-### llama.cpp reports wrong GPU arch or falls back to CPU
-Check your GPU arch: `rocminfo | grep gfx`. If it's not `gfx1031`, update `AMDGPU_TARGET` in `setup/build_llamacpp.sh` and rebuild.
+### llama.cpp falls back to CPU or is very slow
+Confirm CUDA is enabled and visible:
+```bash
+nvidia-smi
+```
+If needed, rebuild llama.cpp with CUDA and set `CUDA_ARCH` before running `setup/build_llamacpp.sh`.
 
 ### Out of memory (OOM) during 14B run
 The 14B model is estimated at ~10.2 GB with the draft model and KV cache at 8192 context. If you OOM:
@@ -357,8 +368,8 @@ The 14B model is estimated at ~10.2 GB with the draft model and KV cache at 8192
 ### `huggingface-cli` download fails or is slow
 Downloads are resumable — just re-run the same command. If you're on a slow connection, consider using `--quiet` flag or running overnight. The 32B model is 19 GB.
 
-### rocm-smi shows wrong values or crashes
-Some versions of ROCm have changed rocm-smi's output format. `run_profiling.sh` parses specific field names — if they've changed, check `rocm-smi --help` and update the `grep` patterns in the script.
+### nvidia-smi shows wrong values or crashes
+`run_profiling.sh` uses `nvidia-smi --query-gpu` to parse utilization and clocks. If your driver changes the output format, update the query fields in the script.
 
 ---
 
@@ -367,14 +378,12 @@ Some versions of ROCm have changed rocm-smi's output format. `run_profiling.sh` 
 If teammates have different GPUs, update `config.sh` before running on their machine:
 
 ```bash
-# For NVIDIA (RTX 3090, 4090, etc.)
+# For NVIDIA (RTX 3090, 4090, A100, etc.)
 # Build llama.cpp with: cmake -DGGML_CUDA=ON
-# Replace rocm-smi with nvidia-smi in run_profiling.sh
-# GPU_ID=0 stays the same
+# GPU_ID=0 stays the same (use CUDA_VISIBLE_DEVICES in the job)
 
-# For 16 GB GPU (RTX 3080, 4070 Ti, RX 7900 XT)
-# 14B model still fits; 32B still offloads
-# GPU_LAYERS_14B=99 still correct
+# For GPUs with smaller VRAM
+# Reduce CTX_SIZE or lower GPU_LAYERS_14B to avoid OOM
 ```
 
 The sweep scripts and analysis pipeline are hardware-agnostic — only the build step and the profiling monitoring commands differ.

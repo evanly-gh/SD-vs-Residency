@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Build llama.cpp with ROCm/HIP support for Navi 22 (gfx1031).
+# Build llama.cpp with CUDA support for NVIDIA RTX 6000.
 # Run this script once from anywhere; it clones into $HOME/llama.cpp.
 #
 # Prerequisites:
-#   - ROCm installed and in PATH (check with: rocminfo | grep gfx)
+#   - NVIDIA driver + CUDA toolkit (nvcc in PATH)
 #   - cmake >= 3.21, git, make, g++
 #
 # After building, llama-bench and llama-cli will be at:
@@ -13,29 +13,23 @@
 set -euo pipefail
 
 LLAMA_DIR="${HOME}/llama.cpp"
-# Navi 22 = gfx1031. Confirm with: rocminfo | grep 'Name:' | grep gfx
-AMDGPU_TARGET="gfx1031"
+# Optional: set CUDA_ARCH to force a specific compute capability (e.g., 89 for Ada).
+CUDA_ARCH="${CUDA_ARCH:-}"
 
-echo "==> Checking ROCm availability..."
-if ! command -v hipcc &>/dev/null; then
-    echo "ERROR: hipcc not found. Is ROCm installed and in PATH?"
-    echo "  Check: which hipcc  or  ls /opt/rocm/bin/hipcc"
+echo "==> Checking CUDA availability..."
+if ! command -v nvcc &>/dev/null; then
+    echo "ERROR: nvcc not found. Load a CUDA module or install the CUDA toolkit."
+    echo "  Check: which nvcc"
     exit 1
 fi
-echo "  hipcc: $(which hipcc)"
-ROCM_VERSION="$(cat /opt/rocm/.info/version 2>/dev/null || echo 'unknown')"
-echo "  ROCm version: ${ROCM_VERSION}"
+echo "  nvcc: $(which nvcc)"
+echo "  CUDA: $(nvcc --version | grep -i release | head -1 || echo 'unknown')"
 
-# ROCm 6.x ships clang 17, which looks for GCC 12 C++ standard headers.
-# If only GCC 11 is installed (Ubuntu 22.04 default), the HIP compile test
-# fails with 'cmath' file not found.
-if ! dpkg -l gcc-12 2>/dev/null | grep -q '^ii'; then
-    echo ""
-    echo "WARNING: gcc-12 not found. ROCm 6.x clang 17 needs GCC 12 headers."
-    echo "  Fix: sudo apt install -y gcc-12 g++-12"
-    echo "  (Attempting build anyway — it may fail with 'cmath' not found)"
-    echo ""
+if ! command -v nvidia-smi &>/dev/null; then
+    echo "ERROR: nvidia-smi not found. Is the NVIDIA driver installed?"
+    exit 1
 fi
+echo "  GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader | head -1 || echo 'unknown')"
 
 echo "==> Cloning llama.cpp into ${LLAMA_DIR}..."
 if [[ -d "${LLAMA_DIR}" ]]; then
@@ -50,14 +44,18 @@ if [[ -n "${LLAMA_CPP_COMMIT:-}" && "${LLAMA_CPP_COMMIT}" != "latest" ]]; then
     git -C "${LLAMA_DIR}" checkout "${LLAMA_CPP_COMMIT}"
 fi
 
-echo "==> Configuring CMake (HIP backend, target=${AMDGPU_TARGET})..."
-# NOTE: The flag was renamed from GGML_HIPBLAS to GGML_HIP in llama.cpp.
-# Passing GGML_HIPBLAS=ON is silently ignored in current builds.
-cmake -S "${LLAMA_DIR}" -B "${LLAMA_DIR}/build" \
-    -DGGML_HIP=ON \
-    -DAMDGPU_TARGETS="${AMDGPU_TARGET}" \
-    -DCMAKE_BUILD_TYPE=Release \
+echo "==> Configuring CMake (CUDA backend)..."
+CMAKE_ARGS=(
+    -DGGML_CUDA=ON
+    -DCMAKE_BUILD_TYPE=Release
     -DLLAMA_CURL=OFF
+)
+if [[ -n "${CUDA_ARCH}" ]]; then
+    CMAKE_ARGS+=("-DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}")
+    echo "  Using CUDA arch: ${CUDA_ARCH}"
+fi
+
+cmake -S "${LLAMA_DIR}" -B "${LLAMA_DIR}/build" "${CMAKE_ARGS[@]}"
 
 echo "==> Building (using $(nproc) cores)..."
 cmake --build "${LLAMA_DIR}/build" --config Release -j"$(nproc)"

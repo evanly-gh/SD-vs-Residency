@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # Hardware profiling session for a single target configuration.
-# Runs rocm-smi in the background while llama-bench executes, capturing:
+# Runs nvidia-smi in the background while llama-bench executes, capturing:
 #   - GPU compute utilization (%)
 #   - VRAM usage (MB)
 #   - GPU clock frequencies (MHz)
-#   - PCIe transfer rates (where rocm-smi exposes them)
 #
 # Usage:
 #   bash scripts/run_profiling.sh <model_label> <ngl> <gamma> [spec|base]
@@ -43,8 +42,8 @@ echo "    Thermal discard: ${THERMAL_DISCARD_SECS}s"
 echo "    Collection window: ${PROFILING_SECS}s"
 echo ""
 
-# ── rocm-smi polling function ────────────────────────────────────────────────
-start_rocm_monitor() {
+# ── nvidia-smi polling function ──────────────────────────────────────────────
+start_gpu_monitor() {
     local csv_file="$1"
     echo "timestamp_s,gpu_use_pct,mem_use_mb,sclk_mhz,mclk_mhz" > "${csv_file}"
     local start_time
@@ -54,19 +53,17 @@ start_rocm_monitor() {
         now=$(date +%s)
         local elapsed=$(( now - start_time ))
 
-        # rocm-smi --showuse --showmemuse outputs GPU%/VRAM in parseable form
-        local gpu_use mem_use sclk mclk
-        gpu_use=$(rocm-smi -d "${GPU_ID}" --showuse 2>/dev/null \
-            | grep -oP 'GPU use \(%\)\s*:\s*\K\d+' | head -1 || echo "NA")
-        mem_use=$(rocm-smi -d "${GPU_ID}" --showmemuse 2>/dev/null \
-            | grep -oP 'GPU Memory Allocated.*?:\s*\K[\d.]+' | head -1 || echo "NA")
-        sclk=$(rocm-smi -d "${GPU_ID}" --showclkfrq 2>/dev/null \
-            | awk '/sclk/{getline; print $2; exit}' || echo "NA")
-        mclk=$(rocm-smi -d "${GPU_ID}" --showclkfrq 2>/dev/null \
-            | awk '/mclk/{getline; print $2; exit}' || echo "NA")
+        # Query: utilization.gpu, memory.used (MB), clocks.sm/mem (MHz)
+        local query out gpu_use mem_use sclk mclk
+        query="utilization.gpu,memory.used,clocks.sm,clocks.mem"
+        out=$(nvidia-smi -i "${GPU_ID}" --query-gpu=${query} --format=csv,noheader,nounits 2>/dev/null || echo "NA,NA,NA,NA")
+        gpu_use=$(echo "${out}" | awk -F',' '{gsub(/ /, "", $1); print $1}')
+        mem_use=$(echo "${out}" | awk -F',' '{gsub(/ /, "", $2); print $2}')
+        sclk=$(echo "${out}" | awk -F',' '{gsub(/ /, "", $3); print $3}')
+        mclk=$(echo "${out}" | awk -F',' '{gsub(/ /, "", $4); print $4}')
 
         echo "${elapsed},${gpu_use},${mem_use},${sclk},${mclk}" >> "${csv_file}"
-        sleep "$(echo "${ROCM_SMI_INTERVAL_MS} / 1000" | bc -l)"
+        sleep "$(echo "${GPU_SMI_INTERVAL_MS} / 1000" | bc -l)"
     done
 }
 
@@ -92,7 +89,7 @@ build_bench_cmd() {
 # ── Phase 1: Thermal warm-up (discard) ───────────────────────────────────────
 echo "── Phase 1: thermal warm-up (${THERMAL_DISCARD_SECS}s, data discarded) ──"
 WARMUP_CSV="${PROFILING_DIR}/profile_${SESSION_ID}.warmup.csv"
-start_rocm_monitor "${WARMUP_CSV}" &
+start_gpu_monitor "${WARMUP_CSV}" &
 MONITOR_PID=$!
 
 # Run bench in a loop until warm-up time has elapsed
@@ -107,7 +104,7 @@ echo "    Warm-up complete."
 
 # ── Phase 2: Steady-state collection ─────────────────────────────────────────
 echo "── Phase 2: steady-state collection (${PROFILING_SECS}s) ───────────────"
-start_rocm_monitor "${PROFILE_CSV}" &
+start_gpu_monitor "${PROFILE_CSV}" &
 MONITOR_PID=$!
 
 COLLECT_END=$(( $(date +%s) + PROFILING_SECS ))
