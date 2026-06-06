@@ -214,13 +214,19 @@ def load_acceptance_data() -> pd.DataFrame:
 
 
 def compute_speedup(df_tp: pd.DataFrame) -> pd.DataFrame:
-    """Add speedup_ratio column = spec median_ts / baseline median_ts."""
+    """Add speedup_ratio column = spec median_ts / baseline median_ts.
+
+    llama-bench emits two rows per (model, ngl): a prompt-eval row (n_gen=0,
+    ~1000s of tps) and a token-generation row (n_prompt=0, ~50 tps). Only the
+    generation row is comparable to llama-speculative throughput, so filter
+    baselines to n_gen > 0 before computing the ratio.
+    """
     if df_tp.empty:
         return df_tp
 
+    base_rows = df_tp[(df_tp["condition"] == "baseline") & (df_tp.get("n_gen", 0) > 0)]
     baseline = (
-        df_tp[df_tp["condition"] == "baseline"]
-        .groupby(["model", "ngl"])["median_ts"]
+        base_rows.groupby(["model", "ngl"])["median_ts"]
         .median()
         .rename("baseline_ts")
     )

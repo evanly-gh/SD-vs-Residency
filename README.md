@@ -170,10 +170,20 @@ bash scripts/run_acceptance.sh
 Runs `llama-cli` (not `llama-bench`) with real prompts from the three task categories (code generation, structured reasoning, open-ended chat), under both thinking mode (`/think`) and non-thinking mode (`/no_think`). Logs acceptance rate statistics — `n_drafted / n_accepted / accept%` — to `data/logs/accept_*.log`.
 
 **Thinking mode:** Qwen3 supports two response modes:
-- `/think` prepended to a prompt: generates a long structured chain-of-thought inside `<think>` tags before answering. We hypothesize this will be far more draftable than non-thinking output because the `<think>` token stream is highly structured and repetitive.
+- `/think` prepended to a prompt: generates a long structured chain-of-thought inside `<think>` tags before answering.
 - `/no_think`: direct response with no chain-of-thought.
 
-This is an open empirical question — if the 0.6B draft model cannot reliably predict the 14B's thought process, the hypothesis will show up as low acceptance rates in thinking mode.
+**Original (pre-registered) hypothesis:** thinking-mode output would be *more* draftable than direct output, because `<think>` chains use a constrained, repetitive register that should be easier for the 0.6B draft to predict.
+
+**Result on Qwen3-14B target / Qwen3-0.6B draft (n=240 prompts × γ, Q4_K_M, fully VRAM-resident):** the hypothesis is **rejected, with the opposite direction confirmed**. Thinking mode *lowers* mean acceptance rate by 4.3 pp (paired t = 2.21, p = 0.028) across all three task families:
+
+| task | nothink α | think α | Δ |
+|---|---|---|---|
+| chat | 35.5% | 29.9% | −5.6 |
+| code | 44.7% | 39.3% | −5.4 |
+| reasoning | 49.2% | 47.4% | −1.8 |
+
+The effect is small in absolute terms but consistent in sign across every task. The most plausible mechanism is that the 0.6B draft is **too small** to track the target's reasoning trajectory: long structured chains give it more *opportunities* to diverge, not fewer. The "structured and repetitive" surface form does not, in this dense Q4_K_M family, translate to higher draftability — surface-level structure isn't what the draft is conditioning on. A larger draft (e.g. Qwen3-1.7B) might reverse this; that ablation has not been run.
 
 ### Phase 3 (Week 5): Hardware profiling
 

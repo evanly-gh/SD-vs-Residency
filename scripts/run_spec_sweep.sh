@@ -35,14 +35,26 @@ echo "    Runs per condition: ${REPETITIONS} (first 2 discarded in analysis)"
 echo ""
 
 parse_tps() {
-    # Extract tokens/sec from llama-speculative timing output.
-    # Looks for: "eval time = xxx ms / yyy runs (z ms per token, W.W tokens per second)"
-    grep -oP 'eval time.*?\K[\d.]+(?= tokens per second)' "${1}" | tail -1
+    # Current llama-speculative prints:  "decoded NNN tokens in M.MMM seconds, speed:   TT.TTT t/s"
+    # Older builds used:                  "eval time = ... (TT.T tokens per second)"
+    # Try the new format first, fall back to the old.
+    local v
+    v=$(grep -oP 'decoded\s+\d+\s+tokens\s+in\s+[\d.]+\s+seconds,\s+speed:\s+\K[\d.]+' "${1}" | tail -1 || true)
+    if [[ -z "${v}" ]]; then
+        v=$(grep -oP 'eval time.*?\K[\d.]+(?= tokens per second)' "${1}" | grep -v '^inf' | tail -1 || true)
+    fi
+    echo "${v}"
 }
 
 parse_accept_pct() {
-    # Extract acceptance % from: "draft accepted: X / Y (Z.Z%)"
-    grep -oP 'draft accepted:.*?\K[\d.]+(?=%)' "${1}" | tail -1
+    # Current format: "accept    = 38.806%"
+    # Older format:   "draft accepted: 312 / 804 (38.8%)"
+    local v
+    v=$(grep -oP 'accept\s*=\s*\K[\d.]+(?=%)' "${1}" | tail -1 || true)
+    if [[ -z "${v}" ]]; then
+        v=$(grep -oP 'draft accepted:.*?\K[\d.]+(?=%)' "${1}" | tail -1 || true)
+    fi
+    echo "${v}"
 }
 
 run_spec() {
