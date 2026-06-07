@@ -1,5 +1,4 @@
 results/
-plots/
 *.tmp
 __pycache__/
 *.pyc
