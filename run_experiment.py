@@ -44,6 +44,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--condition",       required=True)
     p.add_argument("--target-model",    required=True)
     p.add_argument("--draft-model",     default="")
+    p.add_argument("--spec-method",     default="none",
+                   choices=["none", "mtp", "draft_model"],
+                   help="none=autoregressive baseline; mtp=target's native MTP "
+                        "self-speculation; draft_model=separate draft model")
     p.add_argument("--mode",            default="standard", choices=["standard", "thinking"])
     p.add_argument("--port",            type=int, default=8100)
     p.add_argument("--output",          required=True)
@@ -66,7 +70,7 @@ def parse_args() -> argparse.Namespace:
 # ---------------------------------------------------------------------------
 
 def build_vllm_command(args: argparse.Namespace) -> list[str]:
-    is_sd = bool(args.draft_model)
+    is_sd = args.spec_method != "none"
     is_thinking = args.mode == "thinking"
 
     # B3 thinking mode needs more context for long CoT responses
@@ -82,21 +86,31 @@ def build_vllm_command(args: argparse.Namespace) -> list[str]:
         "--seed",                   str(args.seed),
         "--reasoning-parser",       "qwen3",
         "--max-model-len",          str(max_model_len),
-        "--disable-log-requests",
         "--trust-remote-code",
+        # Eager mode skips torch.compile + cudagraph capture (~51 sizes), which
+        # for a 27B/35B target adds 10-20 min of startup. Eager lowers absolute
+        # throughput slightly but leaves TAR and the SD/baseline speedup *ratio*
+        # unchanged (both arms eager), and makes unattended startup reliable.
+        "--enforce-eager",
     ]
 
     if is_sd:
-        spec_config = json.dumps({
-            "model":                  args.draft_model,
+        spec = {
             "num_speculative_tokens": args.num_spec_tokens,
-            "method":                 "draft_model",
-        })
-        cmd += ["--speculative-config", spec_config]
+            "method":                 args.spec_method,
+        }
+        # MTP uses the target's own native multi-token-prediction head (no
+        # separate model). draft_model uses an independent draft checkpoint.
+        # NOTE: vLLM forces any qwen3_5 draft to its MTP arch, which requires
+        # the draft hidden size to match the target — so cross-size draft_model
+        # SD is not usable on the Qwen3.5 family; we use MTP self-speculation.
+        if args.spec_method == "draft_model":
+            spec["model"] = args.draft_model
+        cmd += ["--speculative-config", json.dumps(spec)]
 
-    # Standard mode explicitly disables thinking to prevent accidental CoT
-    if not is_thinking:
-        cmd += ["--default-chat-template-kwargs", '{"enable_thinking": false}']
+    # Thinking on/off is controlled per-request via chat_template_kwargs
+    # (see run_single_prompt and the dummy request); vLLM 0.9.2 has no
+    # server-level --default-chat-template-kwargs flag.
 
     return cmd
 
@@ -106,7 +120,7 @@ def launch_vllm(
     port: int,
     logs_dir: str,
     condition: str,
-    timeout_s: int = 600,
+    timeout_s: int = 2400,
 ) -> subprocess.Popen:
     Path(logs_dir).mkdir(parents=True, exist_ok=True)
     job_id = os.environ.get("SLURM_JOB_ID", "local")
@@ -237,14 +251,19 @@ def get_prometheus_snapshot(port: int) -> dict:
             value = float(val_str)
 
         name = metric_name_raw.strip()
+        # Prometheus appends `_total` to Counter names in the exposition format.
+        # vLLM renamed some spec_decode counters between 0.9.x and 0.22.x
+        # (e.g. num_drafts gained the _total suffix), so match on the base name
+        # with any trailing _total stripped — robust across vLLM versions.
+        base = name[:-6] if name.endswith("_total") else name
 
-        if name == "vllm:spec_decode_num_draft_tokens_total":
+        if base == "vllm:spec_decode_num_draft_tokens":
             snapshot["draft_tokens_total"] = value
-        elif name == "vllm:spec_decode_num_accepted_tokens_total":
+        elif base == "vllm:spec_decode_num_accepted_tokens":
             snapshot["accepted_tokens_total"] = value
-        elif name == "vllm:spec_decode_num_drafts":
+        elif base == "vllm:spec_decode_num_drafts":
             snapshot["num_drafts"] = value
-        elif name == "vllm:spec_decode_num_accepted_tokens_per_pos_total":
+        elif base == "vllm:spec_decode_num_accepted_tokens_per_pos":
             # label: position="0"
             pos = None
             for part in labels_str.split(","):
@@ -252,7 +271,7 @@ def get_prometheus_snapshot(port: int) -> dict:
                     pos = int(part.split('"')[1])
             if pos is not None:
                 snapshot["per_pos_accepted"][pos] = value
-        elif name == "vllm:spec_decode_num_draft_tokens_per_pos_total":
+        elif base == "vllm:spec_decode_num_draft_tokens_per_pos":
             pos = None
             for part in labels_str.split(","):
                 if "position" in part:
@@ -467,7 +486,7 @@ def main():
     _active_port = args.port
     _active_target_model = args.target_model
 
-    is_sd = bool(args.draft_model)
+    is_sd = args.spec_method != "none"
     is_baseline = not is_sd
 
     # Load prompts
@@ -489,6 +508,7 @@ def main():
         "meta": {
             "condition":              args.condition,
             "axis":                   1 if args.condition.startswith("A") or args.condition == "baseline" else 2,
+            "spec_method":            args.spec_method,
             "draft_model":            args.draft_model or None,
             "target_model":           args.target_model,
             "mode":                   args.mode,
@@ -497,7 +517,7 @@ def main():
             "num_prompts":            len(all_prompts),
             "vllm_version":           importlib.metadata.version("vllm"),
             "target_model_hash":      compute_model_hash(args.target_model),
-            "draft_model_hash":       compute_model_hash(args.draft_model) if is_sd else None,
+            "draft_model_hash":       compute_model_hash(args.draft_model) if args.spec_method == "draft_model" else None,
             "slurm_job_id":           os.environ.get("SLURM_JOB_ID", "local"),
             "hostname":               socket.gethostname(),
             "timestamp_utc":          None,  # set at end
