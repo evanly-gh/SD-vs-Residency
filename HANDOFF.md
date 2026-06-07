@@ -1,6 +1,6 @@
 # Speculative Decoding on the Qwen3.5 Family — Project Report & Poster Handoff
 
-**Evan Li** · CSE 493G1 / 599G1 — Deep Learning, Spring 2026 · solo project
+**Evan Li** · CSE 493G1 / 599G1 — Deep Learning,  Spring 2026, University of Washington CSE · solo project
 **Status:** ✅ Complete — 9 conditions × 4 batch sizes on Hyak Klone (2× L40S).
 **Artifacts:** figures in `plots/`; raw per-condition JSON in
 `/mmfs1/gscratch/intelligentsystems/evanly/sd-qwen35/results/`; this document is
