@@ -73,12 +73,11 @@ build_bench_cmd() {
         "${LLAMA_BENCH}"
         -m "${MODEL_PATH}"
         -ngl "${NGL}"
-        -c "${CTX_SIZE}"
         -n "${N_GEN}"
         -p "${N_PROMPT}"
         -r 20          # many repetitions to fill the profiling window
         -o json
-        --output-file "${PROFILE_LOG}"
+        1>"${PROFILE_LOG}"
     )
     if [[ "${MODE}" == "spec" ]]; then
         cmd+=( -md "${MODEL_DRAFT}" -ngld "${GPU_LAYERS_DRAFT}" -d "${GAMMA}" )

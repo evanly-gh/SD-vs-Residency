@@ -33,12 +33,11 @@ run_baseline() {
     "${LLAMA_BENCH}" \
         -m "${model_path}" \
         -ngl "${ngl}" \
-        -c "${CTX_SIZE}" \
         -n "${N_GEN}" \
         -p "${N_PROMPT}" \
         -r "${REPETITIONS}" \
         -o json \
-        --output-file "${out_file}" \
+        1>"${out_file}" \
         2>>"${LOGS_DIR}/baseline_${model_label}_ngl${ngl}.stderr.log"
 
     echo "    → $(basename "${out_file}")"

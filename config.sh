@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+${LLAMA_BENCH} -m "${MODEL_14B}" -ngl "${GPU_LAYERS_14B}" -n "${N_GEN}" -p "${N_PROMPT}" -r "${REPETITIONS}" -o json -v#!/usr/bin/env bash
 # Central configuration — sourced by all other scripts.
 # Edit the paths in this file to match your environment.
 
@@ -7,7 +7,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # ── llama.cpp binaries ────────────────────────────────────────────────────────
 # NOTE: In this build, speculative decoding is in llama-speculative, NOT llama-bench.
 # llama-bench is used for baseline (no spec decoding) throughput only.
-LLAMA_CPP_DIR="${HOME}/llama.cpp"
+DEFAULT_LLAMA_CPP_DIR="/gscratch/scrubbed/${USER}/llama.cpp"
+LLAMA_CPP_DIR="${LLAMA_CPP_DIR:-${DEFAULT_LLAMA_CPP_DIR}}"
 LLAMA_BENCH="${LLAMA_CPP_DIR}/build/bin/llama-bench"
 LLAMA_CLI="${LLAMA_CPP_DIR}/build/bin/llama-cli"
 LLAMA_SPECULATIVE="${LLAMA_CPP_DIR}/build/bin/llama-speculative"

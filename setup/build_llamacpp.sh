@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
 # Build llama.cpp with CUDA support for NVIDIA RTX 6000.
-# Run this script once from anywhere; it clones into $HOME/llama.cpp.
+# Run this script once from anywhere; it clones into a scratch directory by default.
 #
 # Prerequisites:
 #   - NVIDIA driver + CUDA toolkit (nvcc in PATH)
 #   - cmake >= 3.21, git, make, g++
 #
 # After building, llama-bench and llama-cli will be at:
-#   $HOME/llama.cpp/build/bin/llama-bench
-#   $HOME/llama.cpp/build/bin/llama-cli
+#   ${LLAMA_CPP_DIR}/build/bin/llama-bench
+#   ${LLAMA_CPP_DIR}/build/bin/llama-cli
 
 set -euo pipefail
 
-LLAMA_DIR="${HOME}/llama.cpp"
+# Prefer scratch storage to avoid $HOME quota. Override with LLAMA_CPP_DIR.
+DEFAULT_LLAMA_DIR="/gscratch/scrubbed/${USER}/llama.cpp"
+LLAMA_DIR="${LLAMA_CPP_DIR:-${DEFAULT_LLAMA_DIR}}"
 # Optional: set CUDA_ARCH to force a specific compute capability (e.g., 89 for Ada).
 CUDA_ARCH="${CUDA_ARCH:-}"
 
