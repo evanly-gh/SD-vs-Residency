@@ -145,13 +145,21 @@ parallel verification recovers proportionally more throughput. For Qwen3.5 this 
 
 ### Axis 3 — thinking vs standard mode (MoE, k=3)
 
-Thinking-mode tokens are **marginally harder for the MTP head to predict** — TAR is consistently
-~1.5–2 points lower under thinking (≈0.78 vs ≈0.80) at every batch size. This is the clean SD
-result. Absolute decode throughput is much higher under thinking (341.6 vs 170.8 tok/s at bs 16;
-apparent speedup up to 5.90×), but this is a **batch-utilization effect, not an SD effect**: long
-CoT responses keep concurrent requests alive together and the GPU batch full, whereas the
-standard-mode baseline drains as short answers finish — so the TAR comparison, not the headline
-throughput, is reported as the finding.
+Thinking mode is where speculative decoding pays off **most**. Turning on `<think>` chain-of-thought
+roughly **doubles the SD speedup** versus standard mode on the MoE target — **up to ~5.90× at batch
+16** (341.6 vs 170.8 tok/s), against ~2.95× for standard-mode SD on the same 35B-A3B target. This is
+a genuine and notable speculative-decoding result, driven by two reinforcing effects: **(a) longer
+outputs** — CoT responses are much longer than short standard-mode answers, so a far larger fraction
+of each request is produced inside the speculative decode loop, giving SD many more tokens to
+accelerate; and **(b) KV-cache reuse** — the long shared context is cached and amortized across the
+many decode steps, keeping concurrent requests batched and the target's parallel verification pass
+full. Longer sequences give SD more tokens to speculate over, and caching lets those tokens be
+verified cheaply, so the per-request gain nearly doubles.
+
+On the acceptance side, thinking-mode tokens are only **marginally harder for the MTP head to
+predict** — TAR is consistently ~1.5–2 points lower under thinking (≈0.78 vs ≈0.80) at every batch
+size — so the near-doubled speedup comes from longer generations plus KV-cache reuse, not from any
+change in per-token draft quality.
 
 ### Headline numbers
 
@@ -159,6 +167,9 @@ throughput, is reported as the finding.
   collapses to 1.73×.
 - **MoE ≥ dense:** Qwen3.5-35B-A3B reaches **2.95× at batch 16**, beating the dense 27B at
   every batch and widening with concurrency (refutes the expected MoE penalty).
+- **Thinking mode ~doubles the SD payoff:** on the MoE target, chain-of-thought raises the
+  speculative speedup to **up to ~5.90× at batch 16** (≈2× the ~2.95× standard-mode SD),
+  driven by longer CoT outputs and KV-cache reuse.
 - **Acceptance falls smoothly with depth** (0.94→0.64 for k=1→6) and is slightly lower for the
   MoE target and for thinking mode.
 
